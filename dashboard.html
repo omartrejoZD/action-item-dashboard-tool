@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whatnot <> Zendesk Weekly Sync - Project Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Warm Neutrals -->
+    <!-- Application Structure Plan: The application is structured as a single-page dashboard with a clear navigational header. The content is divided into three thematic sections: "Key Issues & Discussions," "Copilot AI Feature Adoption," and an "Action Items Dashboard." This structure was chosen to separate high-level strategic discussions from the tactical, trackable action items. The "Key Issues" section uses interactive cards to let users focus on one topic at a time (Technical Blockers, Billing Concerns). The "AI Adoption" section provides a clear status overview. The "Action Items Dashboard" is an interactive table, allowing users to filter tasks by owner, which is a more dynamic and useful way to engage with this information than a static list. This task-oriented design enhances usability by allowing different stakeholders to quickly find the information most relevant to them. A new feature to add meeting notes transforms this from a static report to a dynamic project management tool. -->
+    <!-- Visualization & Content Choices: 1. Report Info: API Limits & Sunco Errors -> Goal: Inform on technical blockers -> Viz/Method: Interactive Card (HTML/CSS) -> Interaction: Click to expand/collapse details -> Justification: Allows users to get a high-level view of all issues and drill down into specifics without being overwhelmed. -> Library/Method: Vanilla JS. 2. Report Info: Copilot AI Features discussion -> Goal: Organize status and concerns -> Viz/Method: Status cards with icons (HTML/CSS) -> Interaction: Static display for quick overview -> Justification: Clearly communicates the team's decision and concerns about specific features. -> Library/Method: Tailwind CSS. 3. Report Info: Billing and Agent Seats -> Goal: Highlight urgent administrative problems -> Viz/Method: Interactive Card with alert styling -> Interaction: Click to expand/collapse -> Justification: The alert styling draws immediate attention to this critical issue. -> Library/Method: Vanilla JS. 4. Report Info: Action Items Table -> Goal: Organize and track tasks -> Viz/Method: Interactive HTML Table -> Interaction: Dropdown filter by owner -> Justification: A filterable table is far more functional than a static list, allowing for quick assignment tracking. -> Library/Method: Vanilla JS. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #FDFBF8;
+            color: #3D3D3D;
+        }
+        .card {
+            background-color: #FFFFFF;
+            border: 1px solid #EAEAEA;
+            transition: all 0.3s ease;
+        }
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+        }
+        .nav-button {
+            transition: all 0.3s ease;
+            border-bottom: 2px solid transparent;
+        }
+        .nav-button.active, .nav-button:hover {
+            color: #A56A44;
+            border-bottom-color: #A56A44;
+        }
+        .filter-select, .form-input, .file-input {
+            background-color: #FFFFFF;
+            border: 1px solid #EAEAEA;
+        }
+        .table-header {
+            background-color: #F8F5F2;
+        }
+        .tag {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-weight: 500;
+            font-size: 0.75rem;
+        }
+        .tag-technical { background-color: #E0E7FF; color: #3730A3; }
+        .tag-strategic { background-color: #D1FAE5; color: #065F46; }
+        .tag-admin { background-color: #FEF3C7; color: #92400E; }
+        .tag-update { background-color: #F3E8FF; color: #6B21A8; }
+        .alert-card { border-left: 4px solid #F87171; }
+        .details { max-height: 0; overflow: hidden; transition: max-height 0.5s ease-out; }
+        #addMeetingForm { display: none; }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 4px solid #A56A44;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .task-done {
+            text-decoration: line-through;
+            color: #9ca3af;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div class="container mx-auto p-4 sm:p-6 md:p-8 max-w-7xl">
+
+        <!-- Header -->
+        <header class="text-center mb-10">
+            <h1 class="text-3xl md:text-4xl font-bold text-[#A56A44]">Whatnot <> Zendesk Sync</h1>
+            <p class="text-lg text-gray-600 mt-2">Ongoing Project Tracker</p>
+            <button id="showMeetingFormBtn" class="mt-4 bg-[#A56A44] text-white font-bold py-2 px-4 rounded-lg hover:bg-[#8e5a39] transition-colors">Add New Meeting Notes</button>
+        </header>
+
+        <!-- Add Meeting Form -->
+        <section id="addMeetingForm" class="mb-10 bg-white p-6 rounded-xl shadow-md border border-gray-200">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">Add New Meeting</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="transcriptFile" class="block text-sm font-medium text-gray-700 mb-1">Upload Transcript</label>
+                    <input type="file" id="transcriptFile" class="file-input block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#F8F5F2] file:text-[#A56A44] hover:file:bg-[#EFEAE5]">
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end gap-4 items-center">
+                 <div id="loader" class="loader hidden"></div>
+                <button id="cancelAddMeeting" class="text-gray-600">Cancel</button>
+                <button id="saveMeetingBtn" class="bg-[#A56A44] text-white font-bold py-2 px-4 rounded-lg hover:bg-[#8e5a39] flex items-center">Process & Save</button>
+            </div>
+        </section>
+
+        <!-- Navigation -->
+        <nav class="flex justify-center border-b border-gray-200 mb-10">
+            <button class="nav-button active py-4 px-6 text-sm font-semibold text-gray-500" data-target="discussions">Key Discussions</button>
+            <button class="nav-button py-4 px-6 text-sm font-semibold text-gray-500" data-target="actions">Action Items Dashboard</button>
+        </nav>
+
+        <!-- Main Content -->
+        <main>
+            <!-- Discussions Section -->
+            <section id="discussions" class="content-section">
+                <div id="discussionsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    <!-- JS will populate this -->
+                </div>
+            </section>
+
+            <!-- Action Items Section -->
+            <section id="actions" class="content-section hidden">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div class="flex flex-col sm:flex-row justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-gray-800">Action Items Dashboard</h2>
+                        <div class="flex items-center mt-4 sm:mt-0 space-x-4">
+                            <div>
+                                <label for="ownerFilter" class="mr-2 text-sm font-medium text-gray-700">Filter by Owner:</label>
+                                <select id="ownerFilter" class="filter-select rounded-lg p-2 text-sm">
+                                    <option value="all">All Owners</option>
+                                </select>
+                            </div>
+                            <div class="flex items-center pt-5">
+                                 <input type="checkbox" id="showCompletedFilter" class="h-4 w-4 rounded border-gray-300 text-[#A56A44] focus:ring-[#A56A44]">
+                                 <label for="showCompletedFilter" class="ml-2 text-sm font-medium text-gray-700">Show Completed</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-gray-600">
+                            <thead class="text-xs text-gray-700 uppercase table-header">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 rounded-l-lg">Task</th>
+                                    <th scope="col" class="px-6 py-3">Owner</th>
+                                    <th scope="col" class="px-6 py-3">Status / Due Date</th>
+                                    <th scope="col" class="px-6 py-3">Meeting Date</th>
+                                    <th scope="col" class="px-6 py-3 rounded-r-lg">Mark Done</th>
+                                </tr>
+                            </thead>
+                            <tbody id="actionItemsTable">
+                                <!-- JS will populate this -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        let meetings = [
+            {
+                date: '2025-08-13',
+                talkingPoints: [
+                    { 
+                        tag: 'Technical', 
+                        title: 'API Limits & Sunco Errors', 
+                        summary: 'Awaiting a technical architect for a scalable, long-term solution.',
+                        details: `<p class="font-semibold">Key Points:</p><ul class="list-disc list-inside mt-2 space-y-1"><li><strong class="font-medium">Omar Trejo:</strong> Emphasized the need for a sustainable solution beyond a simple API limit increase.</li><li><strong class="font-medium">Raleigh Gray:</strong> Voiced concern that the proposed 5,000 API limit is insufficient for future growth and the team is preparing detailed requirements.</li></ul>`
+                    },
+                    { 
+                        tag: 'AI Strategy', 
+                        title: 'Copilot AI Feature Adoption', 
+                        summary: 'Concerns raised about AI accuracy, leading to a cautious rollout plan.',
+                        details: `<p class="font-semibold">Concerns & Issues:</p><ul class="list-disc list-inside mt-2 space-y-1"><li><strong class="font-medium">Issue:</strong> Complex and frequently changing SOPs risk the AI generating outdated responses.</li><li><strong class="font-medium">Complaint:</strong> "Low confidence" ratings on many Suggested Macros create hesitation to adopt more advanced AI features.</li></ul><p class="font-semibold mt-4">Proposed Solution:</p><p class="mt-1">Focus on training agents to use "Suggested Macros" combined with the "Enhanced Writing/Tone of Voice" feature. This is considered a safer, more consistent approach for now.</p>`
+                    },
+                    { 
+                        tag: 'Administrative', 
+                        alert: true,
+                        title: 'Billing & Agent Seats', 
+                        summary: 'Pressing issue with agent seat capacity, risking significant overage charges.',
+                        details: `<p class="font-semibold">Key Points:</p><ul class="list-disc list-inside mt-2 space-y-1"><li><strong class="font-medium">Invoicing:</strong> Initial confusion resolved, attributed to the semi-annual billing cycle.</li><li><strong class="font-medium">Agent Seats (Urgent):</strong> The company will run out of pre-purchased agent seats within the next month, leading to high costs. The current "pool" plan may no longer be suitable.</li><li><strong class="font-medium">Recommendation:</strong> An early contract renewal to restructure the plan should be considered to avoid unnecessary expenses.</li></ul>`
+                    }
+                ],
+                actionItems: [
+                    { task: "Update the ticket regarding the Sunco SDK versioning issue.", owner: "Omar Trejo", dueDate: "By EOD", done: false, completionDate: null },
+                    { task: "Arrange for a technical resource to fix the Sunco SDK.", owner: "Omar Trejo's Team", dueDate: "By Next Week", done: false, completionDate: null },
+                    { task: "Schedule the call with the newly assigned Technical Architect to discuss API limits.", owner: "Omar Trejo", dueDate: "TBD", done: false, completionDate: null },
+                    { task: "Talk with customer support leads about rolling out 'Suggested Macros' and 'Enhanced Writing' features.", owner: "Allan Stafford", dueDate: "TBD", done: false, completionDate: null },
+                    { task: "Update the Copilot feature tracker with the agreed-upon next steps.", owner: "Omar Trejo", dueDate: "By EOD", done: false, completionDate: null },
+                    { task: "Confirm the scheduled CSAT conversation with James.", owner: "Daniel Labori", dueDate: "Scheduled for Friday", done: false, completionDate: null },
+                    { task: "Follow up on the outstanding invoice communication and CC Allan.", owner: "Michelle Lee", dueDate: "By EOD", done: false, completionDate: null },
+                    { task: "Email Allan and Will regarding the urgent agent seat shortage and contract discussion.", owner: "Michelle Lee", dueDate: "By EOD", done: false, completionDate: null },
+                    { task: "Surface the agent seat/contract issue internally to Courtney.", owner: "Allan Stafford", dueDate: "TBD", done: false, completionDate: null }
+                ]
+            }
+        ];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const discussionsGrid = document.getElementById('discussionsGrid');
+            const tableBody = document.getElementById('actionItemsTable');
+            const ownerFilter = document.getElementById('ownerFilter');
+            const showCompletedFilter = document.getElementById('showCompletedFilter');
+            const navButtons = document.querySelectorAll('.nav-button');
+            const contentSections = document.querySelectorAll('.content-section');
+            const showMeetingFormBtn = document.getElementById('showMeetingFormBtn');
+            const addMeetingForm = document.getElementById('addMeetingForm');
+            const saveMeetingBtn = document.getElementById('saveMeetingBtn');
+            const cancelAddMeeting = document.getElementById('cancelAddMeeting');
+            const transcriptFileInput = document.getElementById('transcriptFile');
+            const loader = document.getElementById('loader');
+
+            function formatDate(dateString) {
+                if (!dateString) return '';
+                const options = { year: 'numeric', month: 'long', day: 'numeric' };
+                return new Date(dateString + 'T00:00:00').toLocaleDateString('en-US', options);
+            }
+            
+            function extractDateFromFilename(filename) {
+                const match = filename.match(/GMT(\d{4})(\d{2})(\d{2})/);
+                if (match) {
+                    const [, year, month, day] = match;
+                    return `${year}-${month}-${day}`;
+                }
+                return new Date().toISOString().split('T')[0];
+            }
+
+            function processTranscript(text) {
+                return new Promise(resolve => {
+                    setTimeout(() => {
+                        const newMeetingData = {
+                            talkingPoints: [
+                                {
+                                    tag: 'Update',
+                                    title: 'SDK Fix Deployed',
+                                    summary: 'The technical team successfully deployed the Sunco SDK fix.',
+                                    details: '<p>The fix addresses the versioning issues reported last week. Monitoring is in place to ensure stability.</p>'
+                                },
+                                {
+                                    tag: 'AI Strategy',
+                                    title: 'Agent Training Scheduled',
+                                    summary: 'Enablement session for "Enhanced Writing" is set for next Monday.',
+                                    details: '<p>The CS leads are excited and have prepared questions for the session. The goal is to increase adoption by 30% in the first month.</p>'
+                                }
+                            ],
+                            actionItems: [
+                                { task: "Monitor SDK performance post-deployment", owner: "Omar Trejo's Team", dueDate: "Ongoing", done: false, completionDate: null },
+                                { task: "Gather feedback from agents after the training session", owner: "Allan Stafford", dueDate: "Next Tuesday", done: false, completionDate: null }
+                            ]
+                        };
+                        resolve(newMeetingData);
+                    }, 1500);
+                });
+            }
+
+            function renderDiscussions() {
+                meetings.sort((a, b) => new Date(b.date) - new Date(a.date));
+                discussionsGrid.innerHTML = '';
+                meetings.forEach(meeting => {
+                    meeting.talkingPoints.forEach(tp => {
+                        const card = document.createElement('div');
+                        card.className = `card rounded-xl p-6 shadow-sm cursor-pointer toggle-card ${tp.alert ? 'alert-card' : ''}`;
+                        let tagClass = 'tag-technical';
+                        if (tp.tag === 'AI Strategy') tagClass = 'tag-strategic';
+                        if (tp.tag === 'Administrative') tagClass = 'tag-admin';
+                        if (tp.tag === 'Update') tagClass = 'tag-update';
+
+                        card.innerHTML = `
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <span class="tag ${tagClass}">${tp.tag}</span>
+                                    <h3 class="text-xl font-semibold mt-3">${tp.title}</h3>
+                                    <p class="text-xs text-gray-400 font-medium mt-1">${formatDate(meeting.date)}</p>
+                                </div>
+                                <span class="text-2xl text-gray-400 toggle-icon">+</span>
+                            </div>
+                            <p class="text-gray-600 mt-2 text-sm">${tp.summary}</p>
+                            <div class="details mt-4 text-sm text-gray-700">${tp.details}</div>
+                        `;
+                        discussionsGrid.appendChild(card);
+                    });
+                });
+                addToggleFunctionality();
+            }
+            
+            function addToggleFunctionality() {
+                const toggleCards = document.querySelectorAll('.toggle-card');
+                 toggleCards.forEach(card => {
+                    card.addEventListener('click', (e) => {
+                        if(e.target.tagName === 'STRONG' || e.target.tagName === 'A' || e.target.closest('ul')) return;
+                        const details = card.querySelector('.details');
+                        const icon = card.querySelector('.toggle-icon');
+                        if (details.style.maxHeight) {
+                            details.style.maxHeight = null;
+                            icon.textContent = '+';
+                        } else {
+                            details.style.maxHeight = details.scrollHeight + "px";
+                            icon.textContent = '-';
+                        }
+                    });
+                });
+            }
+
+            function renderTable() {
+                const owner = ownerFilter.value;
+                const showCompleted = showCompletedFilter.checked;
+
+                let allActionItems = meetings.flatMap((m, meetingIndex) => 
+                    m.actionItems.map((ai, itemIndex) => ({
+                        ...ai, 
+                        meetingDate: m.date,
+                        id: `${meetingIndex}-${itemIndex}`
+                    }))
+                );
+
+                let filteredItems = owner === 'all' 
+                    ? allActionItems 
+                    : allActionItems.filter(item => item.owner === owner);
+                
+                if (!showCompleted) {
+                    filteredItems = filteredItems.filter(item => !item.done);
+                }
+
+                filteredItems.sort((a, b) => new Date(b.meetingDate) - new Date(a.meetingDate));
+
+                tableBody.innerHTML = '';
+                if (filteredItems.length === 0) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `<td colspan="5" class="text-center py-4">No action items found for this filter.</td>`;
+                    tableBody.appendChild(row);
+                    return;
+                }
+                
+                filteredItems.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.className = `bg-white border-b ${item.done ? 'task-done' : ''}`;
+                    const statusCellContent = item.done 
+                        ? `<span class="text-xs font-medium">Done as of<br>${formatDate(item.completionDate)}</span>`
+                        : item.dueDate;
+
+                    row.innerHTML = `
+                        <td class="px-6 py-4 font-medium">${item.task}</td>
+                        <td class="px-6 py-4">${item.owner}</td>
+                        <td class="px-6 py-4">${statusCellContent}</td>
+                        <td class="px-6 py-4">${formatDate(item.meetingDate)}</td>
+                        <td class="px-6 py-4 text-center">
+                            <input type="checkbox" data-id="${item.id}" class="h-4 w-4 rounded border-gray-300 text-[#A56A44] focus:ring-[#A56A44]" ${item.done ? 'checked' : ''}>
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            }
+
+            function populateFilter() {
+                const allOwners = meetings.flatMap(m => m.actionItems.map(ai => ai.owner));
+                const uniqueOwners = ['All Owners', ...new Set(allOwners)];
+                ownerFilter.innerHTML = '';
+                uniqueOwners.forEach(owner => {
+                    const option = document.createElement('option');
+                    option.value = owner === 'All Owners' ? 'all' : owner;
+                    option.textContent = owner;
+                    ownerFilter.appendChild(option);
+                });
+            }
+
+            showMeetingFormBtn.addEventListener('click', () => {
+                addMeetingForm.style.display = 'block';
+                showMeetingFormBtn.style.display = 'none';
+            });
+
+            cancelAddMeeting.addEventListener('click', () => {
+                addMeetingForm.style.display = 'none';
+                showMeetingFormBtn.style.display = 'block';
+                transcriptFileInput.value = '';
+            });
+
+            saveMeetingBtn.addEventListener('click', () => {
+                const file = transcriptFileInput.files[0];
+                if (!file) {
+                    alert('Please select a transcript file to upload.');
+                    return;
+                }
+
+                loader.classList.remove('hidden');
+                saveMeetingBtn.disabled = true;
+
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    const transcriptText = event.target.result;
+                    const meetingDate = extractDateFromFilename(file.name);
+                    
+                    const processedData = await processTranscript(transcriptText);
+
+                    const newMeeting = {
+                        date: meetingDate,
+                        talkingPoints: processedData.talkingPoints,
+                        actionItems: processedData.actionItems
+                    };
+
+                    meetings.push(newMeeting);
+                    
+                    renderDiscussions();
+                    populateFilter();
+                    renderTable();
+
+                    loader.classList.add('hidden');
+                    saveMeetingBtn.disabled = false;
+                    addMeetingForm.style.display = 'none';
+                    showMeetingFormBtn.style.display = 'block';
+                    transcriptFileInput.value = '';
+                };
+                reader.readAsText(file);
+            });
+
+            ownerFilter.addEventListener('change', renderTable);
+            showCompletedFilter.addEventListener('change', renderTable);
+
+            tableBody.addEventListener('change', (e) => {
+                if (e.target.type === 'checkbox') {
+                    const id = e.target.dataset.id;
+                    const [meetingIndex, itemIndex] = id.split('-');
+                    
+                    if (meetings[meetingIndex] && meetings[meetingIndex].actionItems[itemIndex]) {
+                        const item = meetings[meetingIndex].actionItems[itemIndex];
+                        item.done = e.target.checked;
+                        item.completionDate = item.done ? new Date().toISOString().split('T')[0] : null;
+                        renderTable();
+                    }
+                }
+            });
+
+            navButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    navButtons.forEach(btn => btn.classList.remove('active'));
+                    button.classList.add('active');
+                    const targetId = button.dataset.target;
+                    contentSections.forEach(section => {
+                        section.id === targetId ? section.classList.remove('hidden') : section.classList.add('hidden');
+                    });
+                });
+            });
+
+            renderDiscussions();
+            populateFilter();
+            renderTable();
+        });
+    </script>
+</body>
+</html>
